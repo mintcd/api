@@ -1,8 +1,8 @@
 import * as cheerio from 'cheerio';
 import {
-  headers, findCookieForUrl, absoluteUrl, proxiedUrl, isSkippable,
+  findCookieForUrl, absoluteUrl, isSkippable,
   extractScripts, rewriteStyles
-} from '@/utils/clone-helpers';
+} from '@/utils/annotation';
 
 export async function onRequestGet(context: PagesContext) {
   const { request } = context;
@@ -25,17 +25,17 @@ export async function onRequestGet(context: PagesContext) {
 
   // Attach cookie for this host if present
   const cookieForUrl = findCookieForUrl(targetUrl);
-  const fetchHeaders: Record<string, string> = { ...headers };
+  const fetchHeaders: Record<string, string> = {
+    'User-Agent': 'Chrome/120.0.0.0',
+    'Content-Type': 'text/html',
+  };
   if (cookieForUrl) {
     fetchHeaders['Cookie'] = cookieForUrl;
   }
 
   const res = await fetch(targetUrl, {
     redirect: 'follow',
-    headers: {
-      'User-Agent': 'Chrome/120.0.0.0',
-      'Content-Type': 'text/html',
-    },
+    headers: fetchHeaders,
   });
 
   if (!res.ok) {
@@ -84,12 +84,8 @@ export async function onRequestGet(context: PagesContext) {
     $(el).attr("srcset", rewritten);
   });
 
-  // Rewrite styles (head + body) and return collected head styles to inject into HTML
-  const headStyles = rewriteStyles($, clonedBase, apiBase);
   const scripts = extractScripts($, clonedBase, apiBase, targetUrl);
-
-
-  // Build HTML body (styles are kept in the HTML; scripts are removed and sent separately)
+  rewriteStyles($, clonedBase, apiBase);
   let body = $('body').html() || '';
 
   // Also return title and favicon

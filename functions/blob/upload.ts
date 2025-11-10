@@ -1,5 +1,5 @@
 import { uploadR2Object } from '@/utils/r2-helpers';
-import type { PagesFunction } from '@/@types/cloudflare';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

@@ -2,14 +2,9 @@
 import cookies from './cookies.json'
 import * as cheerio from 'cheerio';
 import * as css from 'css';
-import { injectSignalSnippet } from '../utils/signal';
 
 type CheerioRoot = ReturnType<typeof cheerio.load>;
-
-export const headers = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-};
+type ScriptItem = { src?: string; content?: string; type?: string; async?: boolean; defer?: boolean };
 
 export function findCookieForUrl(urlStr: string): string | undefined {
   const hostname = new URL(urlStr).hostname;
@@ -67,7 +62,6 @@ export function isSkippable(u: string) {
   return /^data:|^blob:|^mailto:|^tel:|^javascript:/i.test(u || "");
 }
 
-export type ScriptItem = { src?: string; content?: string; type?: string; async?: boolean; defer?: boolean };
 
 export function rewriteStyles($: CheerioRoot, clonedBase: string, apiBase: string): string[] {
   const headStyles: string[] = [];
@@ -157,9 +151,6 @@ export function rewriteStyles($: CheerioRoot, clonedBase: string, apiBase: strin
 export function extractScripts($: CheerioRoot, clonedBase: string, apiBase: string, pageUrl: string): ScriptItem[] {
   const scripts: ScriptItem[] = [];
 
-  // Process all scripts in a single pass. Push to headScripts when the script's
-  // parent is <head>, otherwise push to bodyScripts. This removes duplicated
-  // logic while preserving behavior (proxify srcs and rewrite inline content).
   $('script').each((_: any, el: any) => {
     const script = $(el);
     const src = script.attr('src');
@@ -168,38 +159,26 @@ export function extractScripts($: CheerioRoot, clonedBase: string, apiBase: stri
     const async = script.attr('async') !== undefined;
     const defer = script.attr('defer') !== undefined;
 
-    // Determine whether this script lives in head or not
-    let parentTag = undefined as string | undefined;
-    try {
-      const parent = script.parent();
-      const p = parent && parent.get && parent.get(0);
-      parentTag = p && p.tagName ? String(p.tagName).toLowerCase() : undefined;
-    } catch { parentTag = undefined; }
-
     if (src) {
-      try {
-        const abs = absoluteUrl(clonedBase, src);
-        scripts.push({ src: proxiedUrl(apiBase, abs), type, async, defer });
-      } catch {
-        scripts.push({ src, type, async, defer });
-      }
+      const abs = absoluteUrl(clonedBase, src);
+      scripts.push({ src: proxiedUrl(apiBase, abs), type, async, defer });
     } else if (content) {
       let rewrittenContent = content;
       rewrittenContent = rewrittenContent.replace(/(?:["']?)src(?:["']?)\s*:\s*("|')(.*?)\1/g, (m: any, q: any, u: any) => {
         if (!u || u.startsWith('http') || u.startsWith('//') || isSkippable(u) || u.includes('/proxy/')) return m;
-        try { return `src: ${q}${proxiedUrl(apiBase, absoluteUrl(clonedBase, u))}${q}`; } catch { return m; }
+        return `src: ${q}${proxiedUrl(apiBase, absoluteUrl(clonedBase, u))}${q}`
       });
       rewrittenContent = rewrittenContent.replace(/\.src\s*=\s*("|')(.*?)\1/g, (m: any, q: any, u: any) => {
         if (!u || u.startsWith('http') || u.startsWith('//') || isSkippable(u) || u.includes('/proxy/')) return m;
-        try { return m.replace(u, proxiedUrl(apiBase, absoluteUrl(clonedBase, u))); } catch { return m; }
+        return m.replace(u, proxiedUrl(apiBase, absoluteUrl(clonedBase, u)));
       });
       rewrittenContent = rewrittenContent.replace(/setAttribute\(\s*("|')src\1\s*,\s*("|')(.*?)\2\s*\)/g, (m: any, _q1: any, q2: any, u: any) => {
         if (!u || u.startsWith('http') || u.startsWith('//') || isSkippable(u) || u.includes('/proxy/')) return m;
-        try { return m.replace(u, proxiedUrl(apiBase, absoluteUrl(clonedBase, u))); } catch { return m; }
+        return m.replace(u, proxiedUrl(apiBase, absoluteUrl(clonedBase, u)));
       });
       rewrittenContent = rewrittenContent.replace(/(\w+)\s*:\s*['"](\/[^'\"]*)['"]/g, (m: any, prop: any, u: any) => {
         if (prop === 'src' && !u.startsWith('http') && !u.startsWith('//') && !isSkippable(u) && !u.includes('/proxy/')) {
-          try { return `${prop}: '${proxiedUrl(apiBase, absoluteUrl(clonedBase, u))}'`; } catch { return m; }
+          return `${prop}: '${proxiedUrl(apiBase, absoluteUrl(clonedBase, u))}'`;
         }
         return m;
       });
@@ -218,18 +197,9 @@ export function rewriteCss(css: string, cssUrl: string, apiBase: string) {
   // Rewrite url(...) 
   css = css.replace(/url\((['"]?)([^'"\)]+)\1\)/g, (match, quote, url) => {
     if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return match;
-
-    try {
-      // Resolve relative URLs properly relative to the CSS file location
-      const resolvedUrl = new URL(url, cssUrl);
-      const rewrittenUrl = proxiedUrl(apiBase, resolvedUrl.href);
-      return `url(${quote}${rewrittenUrl}${quote})`;
-    } catch {
-      // If URL parsing fails, fall back to constructing a path-only proxy
-      const proxyBase = `/proxy/${cssUrlObj.host}`;
-      const fullUrl = url.startsWith('/') ? `${proxyBase}${url}` : `${proxyBase}/${url}`;
-      return `url(${quote}${fullUrl}${quote})`;
-    }
+    const resolvedUrl = new URL(url, cssUrl);
+    const rewrittenUrl = proxiedUrl(apiBase, resolvedUrl.href);
+    return `url(${quote}${rewrittenUrl}${quote})`;
   });
 
   // Rewrite @import url(...)
@@ -265,4 +235,13 @@ export function rewriteCss(css: string, cssUrl: string, apiBase: string) {
   });
 
   return css;
+}
+
+// export function rewriteJs(js: string, jsUrl: string, apiBase: string): string {
+//   const jsUrlObj = new URL(jsUrl);
+// }
+
+export function injectSignalSnippet(text: string, url: string): string {
+  const signalSnippet = `\n\n;// Proxy execution signal - do not remove\n(function(){try{var d=${JSON.stringify({ url })};if(typeof window!=='undefined'){window.__proxy_script_executed=window.__proxy_script_executed||[];window.__proxy_script_executed.push(d.url);if(typeof window.__proxy_script_executed_dispatch!=='function'){window.__proxy_script_executed_dispatch=function(detail){try{var ev;try{ev=new CustomEvent('proxy:script-executed',{detail:detail});}catch(e){ev=document.createEvent('CustomEvent');ev.initCustomEvent('proxy:script-executed',false,false,detail);}if(typeof window!=='undefined'&&window.dispatchEvent){window.dispatchEvent(ev);} }catch(e){if(typeof console!=='undefined'&&console.warn)console.warn('proxy dispatch error',e);}}}try{window.__proxy_script_executed_dispatch(d);}catch(e){} } }catch(err){if(typeof console!=='undefined'&&console.warn)console.warn('proxy signal error',err);} })();\n`;
+  return `${text}\n${signalSnippet}`;
 }

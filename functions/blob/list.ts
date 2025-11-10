@@ -1,5 +1,4 @@
 import { listR2Objects } from '@/utils/r2-helpers';
-import type { PagesFunction } from '@/@types/cloudflare';
 
 export const onRequestGet: PagesFunction = async (context) => {
   const { request, env } = context;

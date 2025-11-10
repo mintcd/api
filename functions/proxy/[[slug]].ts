@@ -1,5 +1,4 @@
-import { injectSignalSnippet } from '@/utils/signal';
-import { rewriteCss } from '@/utils/clone-helpers';
+import { rewriteCss, injectSignalSnippet } from '@/utils/annotation';
 
 export async function onRequestGet(context: any) {
   const { request, params } = context;
