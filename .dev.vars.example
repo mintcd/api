@@ -1,0 +1,15 @@
+# R2 Storage - Copy this file to .dev.vars and fill in your values
+
+# R2 Storage Configuration
+# Get these from Cloudflare Dashboard > R2 > Manage R2 API Tokens
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+
+# Notion Configuration
+# Get from https://www.notion.so/my-integrations
+NOTION_TOKEN=
+
+# Semantic Scholar API (Optional)
+# Request from https://www.semanticscholar.org/product/api
+SEMANTIC_SCHOLAR_API_KEY=

@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public --port=5001",
+    "deploy": "wrangler pages deploy public",
+    "tail": "wrangler pages deployment tail",
+    "login": "wrangler login",
+    "logout": "wrangler logout",
+    "whoami": "wrangler whoami"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.908.0",
+    "@notionhq/client": "^2.3.0",
+    "cheerio": "^1.1.2",
+    "css": "^3.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@types/cheerio": "^0.22.35",
+    "@types/css": "^0.0.38",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.46.0"
+  }
+}
