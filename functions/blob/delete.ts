@@ -1,12 +1,27 @@
-import { getS3Client, DeleteObjectCommand } from '@/utils/r2-client';
+import { deleteR2Object } from '@/utils/r2-helpers';
+import type { PagesFunction } from '@/@types/cloudflare';
 
-export async function onRequest(context: any) {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export const onRequest: PagesFunction = async (context) => {
   const { request, env } = context;
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
+    });
+  }
 
   if (request.method !== 'DELETE') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
@@ -25,8 +40,7 @@ export async function onRequest(context: any) {
     // Normalize key: remove leading slash if present
     const key = path.startsWith('/') ? path.slice(1) : path;
 
-    const s3 = getS3Client(env);
-    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    await deleteR2Object(env, bucket, key);
 
     return new Response(JSON.stringify({
       success: true,
@@ -34,7 +48,7 @@ export async function onRequest(context: any) {
       path
     }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   } catch (error) {
     console.error('Delete error:', error);
@@ -42,7 +56,7 @@ export async function onRequest(context: any) {
       error: error instanceof Error ? error.message : 'Delete failed'
     }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 }

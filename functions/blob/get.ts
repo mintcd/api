@@ -1,6 +1,7 @@
-import { getS3Client, GetObjectCommand, streamToString } from '@/utils/r2-client';
+import { getR2Object } from '@/utils/r2-helpers';
+import type { PagesFunction } from '@/@types/cloudflare';
 
-export async function onRequest(context: any) {
+export const onRequest: PagesFunction = async (context) => {
   const { request, env } = context;
 
   if (request.method !== 'GET') {
@@ -22,19 +23,11 @@ export async function onRequest(context: any) {
   }
 
   try {
-    const s3 = getS3Client(env);
-    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: path }));
-    const content = await streamToString(res.Body);
-
-    const getContentType = (filePath: string): string => {
-      if (filePath.endsWith('.json')) return 'application/json';
-      if (filePath.endsWith('.xml')) return 'application/xml';
-      return 'text/plain';
-    };
+    const { content, contentType } = await getR2Object(env, bucket, path);
 
     return new Response(content, {
       status: 200,
-      headers: { 'Content-Type': getContentType(path) }
+      headers: { 'Content-Type': contentType }
     });
   } catch (error) {
     console.error('Fetch error:', error);

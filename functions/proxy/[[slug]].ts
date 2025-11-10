@@ -1,20 +1,16 @@
 import { injectSignalSnippet } from '@/utils/signal';
-import { rewriteCssCode } from '@/utils/clone-helpers';
+import { rewriteCss } from '@/utils/clone-helpers';
 
-export async function onRequest(context: any) {
+export async function onRequestGet(context: any) {
   const { request, params } = context;
   const slug = params.slug || [];
-
-  if (request.method !== 'GET') {
-    return new Response('Method not allowed', { status: 405 });
-  }
 
   if (!slug || slug.length === 0) {
     return new Response("Missing target", { status: 400 });
   }
 
   // Accept both: /proxy/{protocol}/{host}/... and /proxy/{host}/...
-  let protocol = "https";
+  let protocol = "http";
   let host = "";
   let pathParts: string[] = [];
 
@@ -35,27 +31,27 @@ export async function onRequest(context: any) {
   const url = new URL(request.url);
   const pathname = "/" + pathParts.join("/");
   const search = url.search || "";
-
-  // Basic sanity checks
-  if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(host)) {
-    return new Response("Invalid host", { status: 400 });
-  }
-  if (protocol !== "http" && protocol !== "https") {
-    return new Response("Invalid protocol", { status: 400 });
-  }
-
   const targetUrl = `${protocol}://${host}${pathname}${search}`;
 
-  // Construct API base from the incoming request
   const incomingHost = request.headers.get('host') || 'localhost';
-  const incomingProto = request.headers.get('x-forwarded-proto') || request.headers.get('x-forwarded-protocol') || 'https';
-  const apiBase = `${incomingProto}://${incomingHost}`;
+  const forwardedProto = request.headers.get('x-forwarded-proto') || request.headers.get('x-forwarded-protocol');
+  const apiBase = forwardedProto ? `${forwardedProto}://${incomingHost}` : `http://${incomingHost}`;
 
-  // Forward request to upstream
   const upstream = await fetch(targetUrl, {
-    method: "GET",
-    redirect: "follow"
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+    redirect: 'follow'
   });
+
+  if (!upstream.ok) {
+    console.log(`[Proxy] Upstream fetch failed: ${targetUrl} -> ${upstream.status} ${upstream.statusText}`);
+    return new Response(`Upstream fetch failed: ${upstream.status} ${upstream.statusText}`, { status: 502 });
+  }
+
+
+  console.log(`[Proxy] ${targetUrl} -> ${upstream.status} ${upstream.headers.get('content-type')}`);
 
   // Build response headers
   const headers = new Headers();
@@ -70,9 +66,23 @@ export async function onRequest(context: any) {
   const acceptRanges = upstream.headers.get("Accept-Ranges");
   if (acceptRanges) headers.set("Accept-Ranges", acceptRanges);
 
-  // CORS
-  headers.set("Access-Control-Allow-Origin", "*");
-  headers.set("Access-Control-Allow-Headers", "Range");
+  // CORS - echo the request Origin when present and respond to preflight
+  const origin = request.headers.get('origin');
+  headers.set("Access-Control-Allow-Origin", origin || "*");
+  headers.set("Access-Control-Allow-Headers", request.headers.get('access-control-request-headers') || "Range");
+  headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  if (origin) headers.set('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight
+  if (request.method === 'OPTIONS') {
+    const preflight = new Headers();
+    preflight.set('Access-Control-Allow-Origin', origin || '*');
+    preflight.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    preflight.set('Access-Control-Allow-Headers', request.headers.get('access-control-request-headers') || 'Range');
+    preflight.set('Access-Control-Max-Age', '600');
+    if (origin) preflight.set('Access-Control-Allow-Credentials', 'true');
+    return new Response(null, { status: 204, headers: preflight });
+  }
 
   if (ct && ((ct.includes("javascript") || pathname.endsWith(".js")) || (ct.includes("text/css") || pathname.endsWith(".css")))) {
     let text = await upstream.text();
@@ -87,20 +97,22 @@ export async function onRequest(context: any) {
 
       text = injectSignalSnippet(text, targetUrl);
 
-      console.log(`[Proxy] Wrapped proxied script in try/finally and included signal: ${targetUrl}`);
+      console.log(`[Proxy] Wrapped in signaling code: ${targetUrl}`);
     } else if (ct.includes("text/css") || pathname.endsWith(".css")) {
-      text = rewriteCssCode(text, targetUrl, apiBase);
+      text = rewriteCss(text, targetUrl, apiBase);
     }
+
+    const respHeaders = new Headers();
+    respHeaders.set('Content-Type', ct);
+    respHeaders.set('Cache-Control', upstream.headers.get('Cache-Control') ?? 'public, max-age=3600');
+    respHeaders.set('Access-Control-Allow-Origin', origin || '*');
+    respHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    respHeaders.set('Access-Control-Allow-Headers', request.headers.get('access-control-request-headers') || 'Range');
+    if (origin) respHeaders.set('Access-Control-Allow-Credentials', 'true');
 
     return new Response(text, {
       status: upstream.status,
-      headers: {
-        "Content-Type": ct,
-        "Cache-Control":
-          upstream.headers.get("Cache-Control") ??
-          "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: respHeaders,
     });
   }
 

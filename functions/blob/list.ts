@@ -1,16 +1,8 @@
-import { getS3Client, ListObjectsV2Command } from '@/utils/r2-client';
-import type { ListObjectsV2CommandInput } from '@aws-sdk/client-s3';
+import { listR2Objects } from '@/utils/r2-helpers';
+import type { PagesFunction } from '@/@types/cloudflare';
 
-export async function onRequest(context: any) {
+export const onRequestGet: PagesFunction = async (context) => {
   const { request, env } = context;
-
-  if (request.method !== 'GET') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
   const url = new URL(request.url);
   const bucket = url.searchParams.get('bucket') || '';
   const type = url.searchParams.get('type') || '';
@@ -20,21 +12,13 @@ export async function onRequest(context: any) {
   console.log(`Listing blobs in bucket="${bucket}" with type="${type}"`);
 
   try {
-    const s3 = getS3Client(env);
-    const params: ListObjectsV2CommandInput = {
-      Bucket: bucket,
-      ...(prefix ? { Prefix: prefix } : {}),
-      ...(delimiter ? { Delimiter: '/' } : {}),
-    };
-    const res = await s3.send(new ListObjectsV2Command(params));
+    const res = await listR2Objects(env, bucket, prefix, delimiter ? '/' : undefined);
     const contents = res.Contents || [];
-    interface Obj { Key?: string; Size?: number; LastModified?: Date }
-    const typedContents = contents as Obj[];
 
-    let blobs = typedContents.map((obj: Obj) => ({
+    let blobs = contents.map((obj: any) => ({
       pathname: obj.Key || '',
       size: obj.Size ?? 0,
-      uploadedAt: obj.LastModified ? obj.LastModified.toISOString() : '',
+      uploadedAt: obj.LastModified ? new Date(obj.LastModified).toISOString() : '',
     }));
 
     // Filter by type extension if provided
