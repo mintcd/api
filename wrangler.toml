@@ -1,6 +1,7 @@
 name = "api"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "public"
 
 # Environment variables will be configured via Cloudflare dashboard or wrangler secrets
 # R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY (for AWS SDK with multiple buckets)
