@@ -8,7 +8,6 @@ export const onRequestGet: PagesFunction = async (context) => {
   const prefix = url.searchParams.get('prefix') || '';
   const delimiter = url.searchParams.get('delimiter') === '1';
 
-  console.log(`Listing blobs in bucket="${bucket}" with type="${type}"`);
 
   try {
     const res = await listR2Objects(env, bucket, prefix, delimiter ? '/' : undefined);
@@ -26,23 +25,13 @@ export const onRequestGet: PagesFunction = async (context) => {
       blobs = blobs.filter((b: { pathname: string }) => types.some((t: string) => b.pathname.endsWith(t)));
     }
 
-    // Sort by upload date (newest first)
-    blobs.sort((a: { uploadedAt: string }, b: { uploadedAt: string }) =>
-      new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-    );
 
-    // Build proxied fetch URL for each object
-    const origin = url.origin;
-    const simplifiedBlobs = blobs.map((b: { pathname: string; size: number; uploadedAt: string }) => ({
-      url: `${origin}/blob/fetch?path=${encodeURIComponent(b.pathname)}&bucket=${encodeURIComponent(bucket)}`,
-      pathname: b.pathname,
-      size: b.size,
-      uploadedAt: b.uploadedAt,
-    }));
+    console.log(`Listed ${blobs.length} blobs in bucket="${bucket}" with type="${type}"`);
+    console.log(blobs)
 
-    return new Response(JSON.stringify(simplifiedBlobs), {
+    return new Response(JSON.stringify(blobs), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' }
     });
   } catch (error) {
     console.error('List error:', error);
@@ -50,7 +39,8 @@ export const onRequestGet: PagesFunction = async (context) => {
       error: error instanceof Error ? error.message : 'Failed to list files'
     }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' }
     });
   }
 }
+

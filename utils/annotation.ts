@@ -1,7 +1,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import cookies from './cookies.json'
 import * as cheerio from 'cheerio';
-import * as css from 'css';
+
+// Lightweight CSS selector scoping helper to avoid importing the 'css' package
+// which pulls in Node-only modules (fs/path) and breaks bundling for Cloudflare.
+/**
+ * Scope selectors in a block of CSS by prefixing selectors with `.cloned-content`.
+ * This is a pragmatic, regex-based shim (not a full CSS parser). It handles
+ * simple selector groups and leaves at-rules (e.g. @media) intact by
+ * processing their inner blocks separately where possible.
+ */
+function scopeCssSelectors(cssText: string): string {
+  try {
+    // Process selectors before opening brace, but avoid at-rules like @media
+    return cssText.replace(/([^{}@][^{}]*)\{/g, (match: string, selectorGroup: string) => {
+      const raw = selectorGroup.trim();
+      if (!raw) return match;
+      if (raw.startsWith('@')) return match;
+
+      const parts = raw.split(',').map(s => s.trim()).map(s => {
+        let newSel = s.replace(/\bbody\b/g, '.cloned-content');
+        if (!/\.cloned-content/.test(newSel)) newSel = '.cloned-content ' + newSel;
+        return newSel;
+      }).join(', ');
+
+      return parts + ' {';
+    });
+  } catch (e) {
+    return `.cloned-content { ${cssText} }`;
+  }
+}
 
 type CheerioRoot = ReturnType<typeof cheerio.load>;
 type ScriptItem = { src?: string; content?: string; type?: string; async?: boolean; defer?: boolean };
@@ -71,19 +99,7 @@ export function rewriteStyles($: CheerioRoot, clonedBase: string, apiBase: strin
     let styleContent = $(el).html() || '';
     styleContent = styleContent.replace(/font-family\s*:\s*([^;]+);/gi, 'font-family: $1 !important;');
     try {
-      const parsed = css.parse(styleContent);
-      if (parsed.stylesheet) {
-        parsed.stylesheet.rules.forEach((rule: any) => {
-          if (rule.type === 'rule' && rule.selectors) {
-            rule.selectors = rule.selectors.map((sel: any) => {
-              let newSel = sel.replace(/\bbody\b/g, '.cloned-content');
-              if (!newSel.includes('.cloned-content')) newSel = '.cloned-content ' + newSel;
-              return newSel;
-            });
-          }
-        });
-        styleContent = css.stringify(parsed);
-      }
+      styleContent = scopeCssSelectors(styleContent);
     } catch (e) {
       styleContent = `.cloned-content { ${styleContent} }`;
     }
@@ -126,19 +142,7 @@ export function rewriteStyles($: CheerioRoot, clonedBase: string, apiBase: strin
       } catch { /* proceed with original if rewrite fails */ }
 
       try {
-        const parsed = css.parse(styleContent);
-        if (parsed.stylesheet) {
-          parsed.stylesheet.rules.forEach((rule: any) => {
-            if (rule.type === 'rule' && rule.selectors) {
-              rule.selectors = rule.selectors.map((sel: any) => {
-                let newSel = sel.replace(/\bbody\b/g, '.cloned-content');
-                if (!newSel.includes('.cloned-content')) newSel = '.cloned-content ' + newSel;
-                return newSel;
-              });
-            }
-          });
-          styleContent = css.stringify(parsed);
-        }
+        styleContent = scopeCssSelectors(styleContent);
       } catch (e) {
         styleContent = `.cloned-content { ${styleContent} }`;
       }

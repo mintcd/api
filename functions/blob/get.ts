@@ -1,12 +1,23 @@
 import { getR2Object } from '@/utils/r2-helpers';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 export const onRequest: PagesFunction = async (context) => {
   const { request, env } = context;
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
 
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
@@ -17,16 +28,15 @@ export const onRequest: PagesFunction = async (context) => {
   if (!path || !bucket) {
     return new Response(JSON.stringify({ error: "Missing 'path' or 'bucket' parameter" }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
   try {
     const { content, contentType } = await getR2Object(env, bucket, path);
-
     return new Response(content, {
       status: 200,
-      headers: { 'Content-Type': contentType }
+      headers: { 'Content-Type': contentType, ...corsHeaders }
     });
   } catch (error) {
     console.error('Fetch error:', error);
@@ -43,7 +53,7 @@ export const onRequest: PagesFunction = async (context) => {
     } catch { }
     return new Response(JSON.stringify({ error: msg }), {
       status,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 }
