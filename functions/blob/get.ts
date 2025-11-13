@@ -6,13 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-export const onRequest: PagesFunction = async (context) => {
+export const onRequestGet: PagesFunction = async (context) => {
   const { request, env } = context;
-
-  // Handle CORS preflight
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
 
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
