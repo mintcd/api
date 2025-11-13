@@ -1,12 +1,11 @@
 type Env = {
+  KV: KVNamespace;
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   NOTION_TOKEN?: string;
   SEMANTIC_SCHOLAR_API_KEY?: string;
-  REDIS_URL?: string;
-  REDIS_TOKEN?: string;
-  [key: string]: string | undefined;
+  [key: string]: any;
 }
 
 type PagesContext<E = Env> = {
